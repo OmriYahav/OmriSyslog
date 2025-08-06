@@ -274,6 +274,20 @@
             height: 300px;
             margin-bottom: 2rem;
         }
+
+        #loginSuccessBar {
+            background: var(--bg-card);
+            margin: 2rem;
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        #loginSuccessBarCanvas {
+            width: 100%;
+            height: 300px;
+            margin-bottom: 2rem;
+        }
     </style>
 </head>
 <body>
@@ -294,6 +308,10 @@
 
      <div id="loginFailuresBar">
          <canvas id="loginFailuresBarCanvas"></canvas>
+     </div>
+
+     <div id="loginSuccessBar">
+         <canvas id="loginSuccessBarCanvas"></canvas>
      </div>
 
      <div class="main-container">
@@ -389,6 +407,7 @@
              searchLogs();
              initSocket();
              loadLoginFailuresBar();
+             loadLoginSuccessBar();
 
          }
 
@@ -727,6 +746,84 @@
         })
         .catch(err => {
             console.error('Failed to load login failures', err);
+        });
+}
+
+        function loadLoginSuccessBar() {
+    fetch('/api/login_successes_by_client')
+        .then(res => res.json())
+        .then(data => {
+            if (data.length === 0) {
+                const canvas = document.getElementById('loginSuccessBarCanvas');
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#e0e0e0';
+                ctx.font = '16px sans-serif';
+                ctx.fillText('No login successes in the past day', 10, 25);
+                return;
+            }
+
+            data.sort((a, b) => b.count - a.count);
+            const labels = data.map(d => d.client_name);
+            const counts = data.map(d => d.count);
+            const ips = data.map(d => d.source_ip);
+
+            const canvas = document.getElementById('loginSuccessBarCanvas');
+            const container = document.getElementById('loginSuccessBar');
+            canvas.width = Math.max(data.length * 100, container.clientWidth);
+            canvas.height = 300;
+            const ctx = canvas.getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Login Successes',
+                        data: counts,
+                        backgroundColor: 'rgba(46, 204, 113, 0.6)',
+                        borderColor: 'rgba(39, 174, 96, 1)',
+                        borderWidth: 1,
+                        barThickness: 60
+                    }]
+                },
+                options: {
+                    responsive: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Successes'
+                            }
+                        },
+                        x: {
+                            display: false
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    return 'IP: ' + ips[context.dataIndex];
+                                }
+                            }
+                        },
+                        datalabels: {
+                            anchor: 'center',
+                            align: 'center',
+                            rotation: -90,
+                            color: '#fff',
+                            font: { weight: 'bold' },
+                            formatter: function(value, ctx) {
+                                return ctx.chart.data.labels[ctx.dataIndex];
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(err => {
+            console.error('Failed to load login successes', err);
         });
 }
 

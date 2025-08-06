@@ -301,6 +301,61 @@ def api_login_failures_by_client():
             return jsonify([])
 
 
+@app.route('/api/login_successes_by_client')
+def api_login_successes_by_client():
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            with db_pool.get_connection() as conn:
+                cursor = conn.cursor()
+
+                cursor.execute(
+                    """
+                    SELECT
+                        client_name,
+                        source_ip,
+                        COUNT(*)
+                    FROM logs
+                    WHERE timestamp >= datetime('now', '-1 day')
+                      AND LOWER(message) LIKE '%login%'
+                      AND (
+                        LOWER(message) LIKE '%success%'
+                        OR LOWER(message) LIKE '%succeed%'
+                      )
+                    GROUP BY client_name, source_ip
+                    """
+                )
+
+                data = cursor.fetchall()
+
+                success_data = [
+                    {
+                        'client_name': client_name if client_name else 'Unknown',
+                        'source_ip': source_ip if source_ip else 'Unknown',
+                        'count': count,
+                    }
+                    for client_name, source_ip, count in data
+                ]
+
+                return jsonify(success_data)
+
+        except sqlite3.OperationalError as e:
+            if "database is locked" in str(e).lower() and attempt < max_retries - 1:
+                wait_time = (2 ** attempt) + (time.time() % 1)
+                logger.warning(
+                    f"Database locked during login successes query, retrying in {wait_time:.2f}s"
+                )
+                time.sleep(wait_time)
+            else:
+                logger.error(
+                    f"Failed to get login successes data after {max_retries} attempts: {e}"
+                )
+                return jsonify([])
+        except Exception as e:
+            logger.error(f"Error getting login successes data: {e}")
+            return jsonify([])
+
+
 @app.route('/api/login_failures_heatmap')
 def api_login_failures_heatmap():
     max_retries = 3
