@@ -4,6 +4,8 @@ import sqlite3
 import tempfile
 import time
 from datetime import datetime
+import ctypes
+import subprocess
 
 from flask import Flask, jsonify, render_template, request, send_file
 from flask_socketio import SocketIO
@@ -45,6 +47,36 @@ def _read_cpu_usage():
     try:
         if psutil:
             return psutil.cpu_percent(interval=None)
+        if os.name == "nt":
+            class FILETIME(ctypes.Structure):
+                _fields_ = [
+                    ("dwLowDateTime", ctypes.c_ulong),
+                    ("dwHighDateTime", ctypes.c_ulong),
+                ]
+
+            idle_time = FILETIME()
+            kernel_time = FILETIME()
+            user_time = FILETIME()
+            if not ctypes.windll.kernel32.GetSystemTimes(
+                ctypes.byref(idle_time), ctypes.byref(kernel_time), ctypes.byref(user_time)
+            ):
+                raise ctypes.WinError()
+
+            def _ft_to_int(ft):
+                return (ft.dwHighDateTime << 32) | ft.dwLowDateTime
+
+            idle = _ft_to_int(idle_time)
+            kernel = _ft_to_int(kernel_time)
+            user = _ft_to_int(user_time)
+            total = kernel + user
+            if _last_cpu is None:
+                _last_cpu = (total, idle)
+                return 0.0
+            total_diff = total - _last_cpu[0]
+            idle_diff = idle - _last_cpu[1]
+            _last_cpu = (total, idle)
+            return (1 - idle_diff / total_diff) * 100 if total_diff else 0.0
+
         with open("/proc/stat", "r") as f:
             parts = f.readline().split()
         values = list(map(int, parts[1:]))
@@ -68,6 +100,30 @@ def _read_memory_usage():
         if psutil:
             mem = psutil.virtual_memory()
             return mem.total, mem.used, mem.percent
+        if os.name == "nt":
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            status = MEMORYSTATUSEX()
+            status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                raise ctypes.WinError()
+            total = status.ullTotalPhys
+            available = status.ullAvailPhys
+            used = total - available
+            percent = float(status.dwMemoryLoad)
+            return total, used, percent
+
         meminfo = {}
         with open("/proc/meminfo") as f:
             for line in f:
@@ -91,6 +147,16 @@ def _read_network_usage():
             counters = psutil.net_io_counters()
             recv = counters.bytes_recv
             sent = counters.bytes_sent
+        elif os.name == "nt":
+            output = subprocess.check_output(["netstat", "-e"], text=True)
+            recv = sent = 0
+            for line in output.splitlines():
+                if line.strip().lower().startswith("bytes"):
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        recv = int(parts[1])
+                        sent = int(parts[2])
+                    break
         else:
             with open("/proc/net/dev") as f:
                 lines = f.readlines()[2:]
