@@ -26,8 +26,10 @@ class SyslogHandler(socketserver.BaseRequestHandler):
             # Parse syslog message
             log_entry = self.parse_syslog(data, client_ip)
 
-            # Log to console for real-time visibility
-            logger.info(f"{log_entry['timestamp']} {log_entry['source_ip']} {log_entry['message']}")
+            # Avoid printing every log to the console; keep for debugging only
+            logger.debug(
+                f"{log_entry['timestamp']} {log_entry['source_ip']} {log_entry['message']}"
+            )
 
             # Add to queue for batch processing instead of immediate DB write
             log_queue.put(log_entry)
