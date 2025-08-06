@@ -360,6 +360,10 @@
                         <label>&nbsp;</label>
                         <button class="btn btn-secondary" onclick="exportLogs()">Export</button>
                     </div>
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <button id="toggleLiveButton" class="btn btn-secondary" onclick="toggleLive()">Live: On</button>
+                    </div>
                 </div>
             </div>
 
@@ -388,12 +392,15 @@
         let currentPage = 0;
         const logsPerPage = 50;
         let socket;
+        let liveUpdates = true;
 
         // Initialize Socket.IO
         function initSocket() {
             socket = io('/logs');
             socket.on('new_log', function(log) {
-                addLogToTop(log);
+                if (liveUpdates) {
+                    addLogToTop(log);
+                }
             });
             socket.on('system_stats', function(data) {
                 updateSystemStatsDisplay(data);
@@ -641,6 +648,12 @@
             });
 
             window.open(`/api/export?${params}`, '_blank');
+        }
+
+        function toggleLive() {
+            liveUpdates = !liveUpdates;
+            const btn = document.getElementById('toggleLiveButton');
+            btn.textContent = liveUpdates ? 'Live: On' : 'Live: Off';
         }
 
         // Performance monitoring via WebSocket
