@@ -11,6 +11,11 @@ from flask_socketio import SocketIO
 from database import db_manager, db_pool, logger
 from handler import set_socketio
 
+try:
+    import psutil  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    psutil = None
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-this'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -38,6 +43,8 @@ def _read_cpu_usage():
     """Return CPU utilization percentage."""
     global _last_cpu
     try:
+        if psutil:
+            return psutil.cpu_percent(interval=None)
         with open("/proc/stat", "r") as f:
             parts = f.readline().split()
         values = list(map(int, parts[1:]))
@@ -58,6 +65,9 @@ def _read_cpu_usage():
 def _read_memory_usage():
     """Return total, used and percent memory usage."""
     try:
+        if psutil:
+            mem = psutil.virtual_memory()
+            return mem.total, mem.used, mem.percent
         meminfo = {}
         with open("/proc/meminfo") as f:
             for line in f:
@@ -77,19 +87,24 @@ def _read_network_usage():
     """Return network receive/send rate in bytes per second."""
     global _last_net
     try:
-        with open("/proc/net/dev") as f:
-            lines = f.readlines()[2:]
-        recv = sent = 0
-        for line in lines:
-            if ":" not in line:
-                continue
-            iface, data = line.split(":", 1)
-            iface = iface.strip()
-            if iface == "lo":
-                continue
-            fields = data.split()
-            recv += int(fields[0])
-            sent += int(fields[8])
+        if psutil:
+            counters = psutil.net_io_counters()
+            recv = counters.bytes_recv
+            sent = counters.bytes_sent
+        else:
+            with open("/proc/net/dev") as f:
+                lines = f.readlines()[2:]
+            recv = sent = 0
+            for line in lines:
+                if ":" not in line:
+                    continue
+                iface, data = line.split(":", 1)
+                iface = iface.strip()
+                if iface == "lo":
+                    continue
+                fields = data.split()
+                recv += int(fields[0])
+                sent += int(fields[8])
         now = time.time()
         if _last_net is None:
             _last_net = (now, recv, sent)
