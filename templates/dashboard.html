@@ -33,6 +33,11 @@
             display: flex;
             gap: 0.75rem;
         }
+        .date-time {
+            margin-top: 0.25rem;
+            color: #ecf0f1;
+            font-size: 1rem;
+        }
         .header h1 {
             color: #ecf0f1;
             font-size: 2rem;
@@ -263,6 +268,7 @@
     <div class="header">
         <h1><span class="status-indicator status-online"></span>HED-CINEMA Firewalls Syslog Dashboard       By Omri Yahav</h1>
         <p>Real-time log monitoring * for more features just ask Omri</p>
+        <div id="dateTime" class="date-time"></div>
         <div id="systemStats" class="system-stats">
             <span id="cpuStat">CPU: --%</span>
             <span id="memStat">MEM: --%</span>
@@ -614,6 +620,16 @@
             const sendKB = (data.net_send_rate / 1024).toFixed(1);
             document.getElementById('netStat').textContent = `NET: ↓${recvKB} ↑${sendKB} KB/s`;
         }
+
+        function updateDateTime() {
+            const now = new Date();
+            document.getElementById('dateTime').textContent = now.toLocaleString();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+        });
 
         // Auto-refresh stats and sources every 30 seconds
         setInterval(() => {
