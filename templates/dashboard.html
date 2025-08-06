@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> HED-CINEMA Clients Firewall Logs  - Omri Yahav </title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        .system-stats {
+            position: absolute;
+            top: 1rem;
+            right: 2rem;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            display: flex;
+            gap: 0.75rem;
+        }
+        .header h1 {
+            color: #ecf0f1;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 2rem;
+            padding: 2rem;
+            height: calc(100vh - 200px);
+        }
+        .logs-section {
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar {
+            background: #2c2c2c;
+            border-radius: 8px;
+            padding: 1.5rem;
+            max-height: 100%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar h3 {
+            color: #3498db;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+        .sources-list {
+            flex: 1;
+            overflow-y: auto;
+            margin: -0.5rem;
+            padding: 0.5rem;
+        }
+        .sources-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        .sources-list::-webkit-scrollbar-track {
+            background: #1a1a1a;
+            border-radius: 4px;
+        }
+        .sources-list::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 4px;
+        }
+        .sources-list::-webkit-scrollbar-thumb:hover {
+            background: #777;
+        }
+        .source-item {
+            background: #3c3c3c;
+            margin-bottom: 0.5rem;
+            padding: 0.75rem;
+            border-radius: 4px;
+            border-left: 3px solid #3498db;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .source-item:hover {
+            background: #4c4c4c;
+            transform: translateX(2px);
+        }
+        .source-name {
+            font-weight: bold;
+            color: #ecf0f1;
+            margin-bottom: 0.25rem;
+        }
+        .source-ip {
+            color: #95a5a6;
+            font-size: 0.85rem;
+            margin-bottom: 0.25rem;
+        }
+        .source-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #7f8c8d;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            padding: 0 2rem 2rem 2rem;
+        }
+        .stat-card {
+            background: #2c2c2c;
+            padding: 1.5rem;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .stat-card h3 { color: #3498db; margin-bottom: 0.5rem; }
+        .stat-card .value { font-size: 2rem; font-weight: bold; color: #ecf0f1; }
+        .controls {
+            background: #2c2c2c;
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid #444;
+        }
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            align-items: end;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #bdc3c7;
+            font-weight: 500;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background: #3c3c3c;
+            color: #e0e0e0;
+            font-size: 0.9rem;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: #3498db; color: white; }
+        .btn-primary:hover { background: #2980b9; }
+        .btn-secondary { background: #95a5a6; color: white; }
+        .btn-secondary:hover { background: #7f8c8d; }
+        .progress { background: #3c3c3c; border-radius: 4px; height: 8px; margin-top: 0.5rem; overflow: hidden; }
+        .progress-bar { background: #3498db; height: 100%; width: 0%; transition: width 0.3s; }
+        .progress-label { text-align: right; font-size: 0.75rem; color: #bdc3c7; margin-top: 0.25rem; }
+        .logs-container {
+            flex: 1;
+            overflow-y: auto;
+            margin: -0.5rem;
+            padding: 0.5rem;
+        }
+        .logs-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .logs-container::-webkit-scrollbar-track {
+            background: #1a1a1a;
+            border-radius: 4px;
+        }
+        .logs-container::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 4px;
+        }
+        .logs-container::-webkit-scrollbar-thumb:hover {
+            background: #777;
+        }
+        .log-entry {
+            background: #2c2c2c;
+            margin-bottom: 0.5rem;
+            padding: 1rem;
+            border-radius: 4px;
+            border-left: 4px solid #95a5a6;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+        }
+        .log-entry.severity-0, .log-entry.severity-1, .log-entry.severity-2 { border-left-color: #e74c3c; }
+        .log-entry.severity-3 { border-left-color: #e67e22; }
+        .log-entry.severity-4 { border-left-color: #f39c12; }
+        .log-entry.severity-5, .log-entry.severity-6 { border-left-color: #27ae60; }
+        .log-entry.severity-7 { border-left-color: #9b59b6; }
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .log-timestamp { color: #3498db; font-weight: bold; }
+        .log-source { color: #e67e22; }
+        .log-severity {
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+        .log-message { color: #ecf0f1; margin-top: 0.5rem; }
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        .status-online { background: #27ae60; }
+        .status-offline { background: #e74c3c; }
+        .loading { text-align: center; padding: 2rem; color: #7f8c8d; }
+        .empty-state { text-align: center; padding: 3rem; color: #7f8c8d; }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        #loginFailuresBar {
+            background: #2c2c2c;
+            margin: 2rem;
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto; /* allow scrolling when there are many clients */
+        }
+
+        #loginFailuresBarCanvas {
+            width: 100%;
+            height: 300px;
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><span class="status-indicator status-online"></span>HED-CINEMA Firewalls Syslog Dashboard       By Omri Yahav</h1>
+        <p>Real-time log monitoring * for more features just ask Omri</p>
+        <div id="systemStats" class="system-stats">
+            <span id="cpuStat">CPU: --%</span>
+            <span id="memStat">MEM: --%</span>
+            <span id="netStat">NET: ↓0 ↑0 KB/s</span>
+        </div>
+    </div>
+
+     <div class="stats-grid" id="statsGrid">
+         <!-- Stats will be loaded here -->
+     </div>
+
+     <div id="loginFailuresBar">
+         <canvas id="loginFailuresBarCanvas"></canvas>
+     </div>
+
+     <div class="main-container">
+        <div class="logs-section">
+            <div class="controls">
+                <div class="controls-grid">
+                    <div class="form-group">
+                        <label>Search Query</label>
+                        <input type="text" id="searchQuery" placeholder="Search in messages, hostnames...">
+                    </div>
+                    <div class="form-group">
+                        <label>Source IP</label>
+                        <input type="text" id="sourceIp" placeholder="Filter by source IP">
+                    </div>
+                    <div class="form-group">
+                        <label>Hostname</label>
+                        <input type="text" id="hostname" placeholder="Filter by hostname">
+                    </div>
+                    <div class="form-group">
+                        <label>Severity Level</label>
+                        <select id="severity">
+                            <option value="">All Levels</option>
+                            <option value="0">Emergency</option>
+                            <option value="1">Alert</option>
+                            <option value="2">Critical</option>
+                            <option value="3">Error</option>
+                            <option value="4">Warning</option>
+                            <option value="5">Notice</option>
+                            <option value="6">Info</option>
+                            <option value="7">Debug</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Start Time</label>
+                        <input type="datetime-local" id="startTime">
+                    </div>
+                    <div class="form-group">
+                        <label>End Time</label>
+                        <input type="datetime-local" id="endTime">
+                    </div>
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <button class="btn btn-primary" onclick="searchLogs()">Search</button>
+                    </div>
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <button class="btn btn-secondary" onclick="exportLogs()">Export</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="logs-container">
+                <div id="logsContent">
+                    <div class="loading">Loading logs...</div>
+                </div>
+                <div class="pagination" id="pagination" style="display: none;">
+                    <button class="btn btn-secondary" onclick="prevPage()">Previous</button>
+                    <span id="pageInfo">Page 1</span>
+                    <button class="btn btn-secondary" onclick="nextPage()">Next</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <h3>Active Sources</h3>
+            <div class="sources-list" id="sourcesList">
+                <div class="loading">Loading sources...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        Chart.register(ChartDataLabels);
+        let currentPage = 0;
+        const logsPerPage = 50;
+        let socket;
+
+        // Initialize Socket.IO
+        function initSocket() {
+            socket = io('/logs');
+            socket.on('new_log', function(log) {
+                addLogToTop(log);
+            });
+            socket.on('system_stats', function(data) {
+                updateSystemStatsDisplay(data);
+            });
+        }
+
+        // Load initial data
+        function loadDashboard() {
+             loadStats();
+             loadActiveSources();
+             searchLogs();
+             initSocket();
+             loadLoginFailuresBar();
+
+         }
+
+        // Load statistics
+        function loadStats() {
+            fetch('/api/stats')
+                .then(response => response.json())
+                .then(stats => {
+                    const statsGrid = document.getElementById('statsGrid');
+                    const dbSizeGB = (stats.db_size_bytes / (1024 * 1024 * 1024)).toFixed(2);
+                    const dbPercent = Math.min((stats.db_size_bytes / (10 * 1024 * 1024 * 1024 * 1024)) * 100, 100).toFixed(4);
+                    statsGrid.innerHTML = `
+                        <div class="stat-card">
+                            <h3>Total Logs</h3>
+                            <div class="value">${stats.total_logs.toLocaleString()}</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Recent Activity (24h)</h3>
+                            <div class="value">${stats.recent_logs.toLocaleString()}</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Active Sources</h3>
+                            <div class="value">${stats.top_sources.length}</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Top Source</h3>
+                            <div class="value">${stats.top_sources[0]?.client_name || stats.top_sources[0]?.hostname || 'None'}</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Database Size</h3>
+                            <div class="value">${dbSizeGB} GB</div>
+                            <div class="progress"><div class="progress-bar" style="width: ${dbPercent}%"></div></div>
+                            <div class="progress-label">${dbPercent}% of 10TB</div>
+                        </div>
+                    `;
+                })
+                .catch(error => console.error('Error loading stats:', error));
+        }
+
+        // Load active sources
+        function loadActiveSources() {
+            fetch('/api/stats')
+                .then(response => response.json())
+                .then(stats => {
+                    const sourcesList = document.getElementById('sourcesList');
+                    
+                    if (stats.top_sources.length === 0) {
+                        sourcesList.innerHTML = '<div class="empty-state">No active sources</div>';
+                        return;
+                    }
+
+                    sourcesList.innerHTML = stats.top_sources.map(source => `
+                        <div class="source-item" onclick="filterBySource('${source.hostname}', '${source.ip}')">
+                            <div class="source-name">${source.client_name || source.hostname || 'Unknown'}</div>
+                            <div class="source-ip">${source.ip}</div>
+                            <div class="source-stats">
+                                <span>${source.count} logs</span>
+                                <span>${formatRelativeTime(source.last_seen)}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                })
+                .catch(error => {
+                    console.error('Error loading sources:', error);
+                    document.getElementById('sourcesList').innerHTML = 
+                        '<div class="empty-state">Error loading sources</div>';
+                });
+        }
+
+        // Filter by source
+        function filterBySource(hostname, ip) {
+            document.getElementById('hostname').value = hostname;
+            document.getElementById('sourceIp').value = ip;
+            searchLogs();
+        }
+
+        // Search logs
+        function searchLogs(page = 0) {
+            currentPage = page;
+            const params = new URLSearchParams({
+                query: document.getElementById('searchQuery').value,
+                source_ip: document.getElementById('sourceIp').value,
+                hostname: document.getElementById('hostname').value,
+                severity: document.getElementById('severity').value,
+                start_time: document.getElementById('startTime').value,
+                end_time: document.getElementById('endTime').value,
+                limit: logsPerPage,
+                offset: page * logsPerPage
+            });
+
+            fetch(`/api/logs?${params}`)
+                .then(response => response.json())
+                .then(logs => {
+                    displayLogs(logs);
+                    updatePagination(logs.length);
+                })
+                .catch(error => {
+                    console.error('Error loading logs:', error);
+                    document.getElementById('logsContent').innerHTML = 
+                        '<div class="empty-state">Error loading logs</div>';
+                });
+        }
+
+        // Display logs
+        function displayLogs(logs) {
+            const container = document.getElementById('logsContent');
+            
+            if (logs.length === 0) {
+                container.innerHTML = '<div class="empty-state">No logs found matching your criteria</div>';
+                return;
+            }
+
+            container.innerHTML = logs.map(log => {
+                const sourceName = log.client_name ? `${log.client_name} / ${log.hostname}` : log.hostname;
+                return `
+                <div class="log-entry severity-${log.severity}">
+                    <div class="log-header">
+                        <span class="log-timestamp">${formatTimestamp(log.timestamp)}</span>
+                        <span class="log-source">${sourceName} (${log.source_ip})</span>
+                        <span class="log-severity" style="background: ${getSeverityColor(log.severity)}">${log.severity_name}</span>
+                    </div>
+                    <div class="log-message">${escapeHtml(log.message)}</div>
+                </div>
+                `;}).join('');
+        }
+
+        // Add new log to top of list (real-time)
+        function addLogToTop(log) {
+            const container = document.getElementById('logsContent');
+            if (container.querySelector('.empty-state') || container.querySelector('.loading')) {
+                searchLogs(); // Refresh if empty
+                return;
+            }
+
+            log.severity_name = getSeverityName(log.severity);
+            const sourceName = log.client_name ? `${log.client_name} / ${log.hostname}` : log.hostname;
+            const logHtml = `
+                <div class="log-entry severity-${log.severity}" style="animation: fadeIn 0.5s">
+                    <div class="log-header">
+                        <span class="log-timestamp">${formatTimestamp(log.timestamp)}</span>
+                        <span class="log-source">${sourceName} (${log.source_ip})</span>
+                        <span class="log-severity" style="background: ${getSeverityColor(log.severity)}">${log.severity_name}</span>
+                    </div>
+                    <div class="log-message">${escapeHtml(log.message)}</div>
+                </div>
+            `;
+            
+            container.insertAdjacentHTML('afterbegin', logHtml);
+            
+            // Remove excess logs to prevent memory issues
+            const logEntries = container.querySelectorAll('.log-entry');
+            if (logEntries.length > logsPerPage * 2) {
+                logEntries[logEntries.length - 1].remove();
+            }
+            
+            // Refresh sources list periodically
+            if (Math.random() < 0.1) { // 10% chance to refresh sources on new log
+                loadActiveSources();
+            }
+        }
+
+        // Utility functions
+        function formatTimestamp(timestamp) {
+            const ts = /[zZ]|[+\-]\d{2}:?\d{2}$/.test(timestamp) ? timestamp : timestamp + 'Z';
+            return new Date(ts).toLocaleString();
+        }
+
+        function formatRelativeTime(timestamp) {
+            const ts = /[zZ]|[+\-]\d{2}:?\d{2}$/.test(timestamp) ? timestamp : timestamp + 'Z';
+            const now = new Date();
+            const then = new Date(ts);
+            const diffMs = now - then;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMins / 60);
+            
+            if (diffMins < 1) return 'now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            return `${Math.floor(diffHours / 24)}d ago`;
+        }
+
+        function getSeverityName(severity) {
+            const names = {0: 'Emergency', 1: 'Alert', 2: 'Critical', 3: 'Error', 
+                          4: 'Warning', 5: 'Notice', 6: 'Info', 7: 'Debug'};
+            return names[severity] || 'Unknown';
+        }
+
+        function getSeverityColor(severity) {
+            const colors = {0: '#e74c3c', 1: '#e74c3c', 2: '#e74c3c', 3: '#e67e22',
+                           4: '#f39c12', 5: '#27ae60', 6: '#27ae60', 7: '#9b59b6'};
+            return colors[severity] || '#95a5a6';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function updatePagination(logsCount) {
+            const pagination = document.getElementById('pagination');
+            const pageInfo = document.getElementById('pageInfo');
+            
+            if (logsCount === logsPerPage) {
+                pagination.style.display = 'flex';
+                pageInfo.textContent = `Page ${currentPage + 1}`;
+            } else {
+                pagination.style.display = currentPage > 0 ? 'flex' : 'none';
+                pageInfo.textContent = `Page ${currentPage + 1}`;
+            }
+        }
+
+        function prevPage() {
+            if (currentPage > 0) {
+                searchLogs(currentPage - 1);
+            }
+        }
+
+        function nextPage() {
+            searchLogs(currentPage + 1);
+        }
+
+        function exportLogs() {
+            const params = new URLSearchParams({
+                query: document.getElementById('searchQuery').value,
+                source_ip: document.getElementById('sourceIp').value,
+                hostname: document.getElementById('hostname').value,
+                severity: document.getElementById('severity').value,
+                start_time: document.getElementById('startTime').value,
+                end_time: document.getElementById('endTime').value
+            });
+
+            window.open(`/api/export?${params}`, '_blank');
+        }
+
+        // Performance monitoring via WebSocket
+        function updateSystemStatsDisplay(data) {
+            document.getElementById('cpuStat').textContent = `CPU: ${data.cpu_percent.toFixed(1)}%`;
+            document.getElementById('memStat').textContent = `MEM: ${data.memory_percent.toFixed(1)}%`;
+            const recvKB = (data.net_recv_rate / 1024).toFixed(1);
+            const sendKB = (data.net_send_rate / 1024).toFixed(1);
+            document.getElementById('netStat').textContent = `NET: ↓${recvKB} ↑${sendKB} KB/s`;
+        }
+
+        // Auto-refresh stats and sources every 30 seconds
+        setInterval(() => {
+            loadStats();
+            loadActiveSources();
+        }, 30000);
+
+        // Load dashboard on page load
+        document.addEventListener('DOMContentLoaded', loadDashboard);
+
+        function loadLoginFailuresBar() {
+    fetch('/api/login_failures_by_client')
+        .then(res => res.json())
+        .then(data => {
+            if (data.length === 0) {
+                const canvas = document.getElementById('loginFailuresBarCanvas');
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#e0e0e0';
+                ctx.font = '16px sans-serif';
+                ctx.fillText('No login failures in the past day', 10, 25);
+                return;
+            }
+
+            data.sort((a, b) => b.count - a.count);
+            const labels = data.map(d => d.client_name);
+            const counts = data.map(d => d.count);
+            const ips = data.map(d => d.source_ip);
+
+            const canvas = document.getElementById('loginFailuresBarCanvas');
+            const container = document.getElementById('loginFailuresBar');
+            canvas.width = Math.max(data.length * 100, container.clientWidth);
+            canvas.height = 300;
+            const ctx = canvas.getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Login Failures',
+                        data: counts,
+                        backgroundColor: 'rgba(231, 76, 60, 0.6)',
+                        borderColor: 'rgba(231, 76, 60, 1)',
+                        borderWidth: 1,
+                        barThickness: 60
+                    }]
+                },
+                options: {
+                    responsive: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Failures'
+                            }
+                        },
+                        x: {
+                            display: false
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    return 'IP: ' + ips[context.dataIndex];
+                                }
+                            }
+                        },
+                        datalabels: {
+                            anchor: 'center',
+                            align: 'center',
+                            rotation: -90,
+                            color: '#fff',
+                            font: { weight: 'bold' },
+                            formatter: function(value, ctx) {
+                                return ctx.chart.data.labels[ctx.dataIndex];
+                            }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(err => {
+            console.error('Failed to load login failures', err);
+        });
+}
+
+
+    </script>
+</body>
+</html>
