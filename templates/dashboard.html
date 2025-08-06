@@ -364,6 +364,10 @@
                         <label>&nbsp;</label>
                         <button id="toggleLiveButton" class="btn btn-secondary" onclick="toggleLive()">Live: On</button>
                     </div>
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <button id="toggleRawButton" class="btn btn-secondary" onclick="toggleRaw()">Raw: Off</button>
+                    </div>
                 </div>
             </div>
 
@@ -393,6 +397,7 @@
         const logsPerPage = 50;
         let socket;
         let liveUpdates = true;
+        let showRawLogs = false;
 
         // Initialize Socket.IO
         function initSocket() {
@@ -536,7 +541,7 @@
                         <span class="log-source">${sourceName} (${log.source_ip})</span>
                         <span class="log-severity" style="background: ${getSeverityColor(log.severity)}">${log.severity_name}</span>
                     </div>
-                    <div class="log-message">${escapeHtml(log.message)}</div>
+                    <div class="log-message">${escapeHtml(showRawLogs ? (log.raw_message || log.message) : log.message)}</div>
                 </div>
                 `;}).join('');
         }
@@ -558,7 +563,7 @@
                         <span class="log-source">${sourceName} (${log.source_ip})</span>
                         <span class="log-severity" style="background: ${getSeverityColor(log.severity)}">${log.severity_name}</span>
                     </div>
-                    <div class="log-message">${escapeHtml(log.message)}</div>
+                    <div class="log-message">${escapeHtml(showRawLogs ? (log.raw_message || log.message) : log.message)}</div>
                 </div>
             `;
             
@@ -654,6 +659,13 @@
             liveUpdates = !liveUpdates;
             const btn = document.getElementById('toggleLiveButton');
             btn.textContent = liveUpdates ? 'Live: On' : 'Live: Off';
+        }
+
+        function toggleRaw() {
+            showRawLogs = !showRawLogs;
+            const btn = document.getElementById('toggleRawButton');
+            btn.textContent = showRawLogs ? 'Raw: On' : 'Raw: Off';
+            searchLogs(currentPage);
         }
 
         // Performance monitoring via WebSocket
