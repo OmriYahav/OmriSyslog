@@ -392,7 +392,11 @@
     </div>
 
     <script>
-        Chart.register(ChartDataLabels);
+        try {
+            Chart.register(ChartDataLabels);
+        } catch (err) {
+            console.warn('ChartDataLabels plugin not found. Continuing without it.', err);
+        }
         let currentPage = 0;
         const logsPerPage = 50;
         let socket;
