@@ -13,6 +13,9 @@ from database import DB_PATH, LOG_RETENTION_DAYS
 _metrics_task_started = False
 
 
+_metrics_task_started = False
+
+
 def create_app():
     """Initialize the Flask application and background tasks."""
 
