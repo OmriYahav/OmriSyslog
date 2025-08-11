@@ -5,7 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Syslog Dashboard - Omri Y.</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+     <script>
+         if (!window.io) {
+             const script = document.createElement('script');
+             script.src = '/static/socket.io.min.js';
+             script.onload = () => console.log('Loaded local Socket.IO fallback');
+             script.onerror = () => console.error('Failed to load Socket.IO from CDN and local copy');
+             document.head.appendChild(script);
+         }
+     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 
@@ -405,6 +414,10 @@
 
         // Initialize Socket.IO
         function initSocket() {
+            if (!window.io) {
+                console.error('Socket.IO library not loaded. Skipping WebSocket initialization.');
+                return;
+            }
             socket = io('/logs');
             socket.on('connect', function() {
                 console.info('Connected to log server');
