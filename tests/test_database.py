@@ -61,3 +61,33 @@ def test_pool_initializes_wal_mode(tmp_path):
     conn2.close()
     assert mode2.lower() == "wal"
 
+
+def test_wal_initialization_succeeds_with_locked_db(tmp_path):
+    """Simulate a locked database and ensure WAL initialization succeeds."""
+    from database import DatabaseConnectionPool
+    import sqlite3
+    import threading
+    import time
+
+    db_file = tmp_path / 'locked.db'
+
+    # Acquire an exclusive lock on the database
+    locker = sqlite3.connect(str(db_file), check_same_thread=False)
+    locker.execute("BEGIN EXCLUSIVE")
+
+    def release_lock():
+        time.sleep(1)
+        locker.execute("COMMIT")
+        locker.close()
+
+    t = threading.Thread(target=release_lock)
+    t.start()
+
+    # Should block until the lock is released and then succeed
+    pool = DatabaseConnectionPool(str(db_file), max_connections=1)
+    t.join()
+
+    with pool.get_connection() as conn:
+        mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        assert mode.lower() == "wal"
+

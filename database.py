@@ -38,7 +38,10 @@ class DatabaseConnectionPool:
     def _initialize_pool(self):
         """Initialize the connection pool"""
         # Ensure database is in WAL mode before creating pool connections
-        attempts = 5
+        attempts = int(os.getenv("DB_WAL_RETRY_ATTEMPTS", "10"))
+        base_delay = float(os.getenv("DB_WAL_RETRY_BASE_DELAY", "0.1"))
+        max_delay = float(os.getenv("DB_WAL_RETRY_MAX_DELAY", "5.0"))
+
         for attempt in range(attempts):
             try:
                 with closing(
@@ -48,21 +51,40 @@ class DatabaseConnectionPool:
                         check_same_thread=False,
                     )
                 ) as tmp_conn:
+                    tmp_conn.execute("PRAGMA busy_timeout=30000")
                     tmp_conn.execute("PRAGMA journal_mode=WAL")
                     tmp_conn.execute("PRAGMA synchronous=NORMAL")
                 break
             except sqlite3.OperationalError as e:
-                # Retry with exponential backoff if database is locked by another
-                # process during WAL mode switch
+                # Retry with exponential (capped) backoff if database is locked by
+                # another process during WAL mode switch
                 if attempt == attempts - 1:
                     raise
-                backoff = 0.1 * (2 ** attempt)
+                backoff = min(base_delay * (2 ** attempt), max_delay)
                 logger.warning(
                     f"Failed to set WAL mode (attempt {attempt + 1}/{attempts}): {e}. "
                     f"Retrying in {backoff:.1f}s"
                 )
                 logger.debug("Temporary connection closed; retrying in %.1fs", backoff)
                 time.sleep(backoff)
+
+        # Verify that the database is in WAL mode
+        with closing(
+            sqlite3.connect(
+                self.db_path,
+                timeout=30.0,
+                check_same_thread=False,
+            )
+        ) as verify_conn:
+            mode = verify_conn.execute("PRAGMA journal_mode").fetchone()[0]
+            if mode.lower() != "wal":
+                msg = (
+                    "Database journal_mode is not WAL after initialization. "
+                    "Ensure no other processes are locking the database and that "
+                    "SQLite supports WAL mode."
+                )
+                logger.error(msg)
+                raise RuntimeError(msg)
 
         for _ in range(self.max_connections):
             conn = self._create_connection()
