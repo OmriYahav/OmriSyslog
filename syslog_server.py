@@ -6,8 +6,18 @@ import socket
 import sys
 
 from handler import start_syslog_server
-from webapp import app, socketio
+from webapp import app, socketio, _broadcast_performance_metrics
 from database import DB_PATH, LOG_RETENTION_DAYS
+
+
+def create_app():
+    """Initialize the Flask application and background tasks."""
+
+    @app.before_serving
+    def _start_background_tasks() -> None:
+        socketio.start_background_task(_broadcast_performance_metrics)
+
+    return app
 
 
 if __name__ == '__main__':
@@ -60,7 +70,8 @@ if __name__ == '__main__':
         print(f"  Port: {syslog_port}/UDP")
         print()
 
-        # Start Flask web server
+        # Prepare and start Flask web server
+        app = create_app()
         socketio.run(app, host='0.0.0.0', port=5000, debug=False)
     except KeyboardInterrupt:
         print("\n\nShutting down server...")
