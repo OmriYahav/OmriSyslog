@@ -206,11 +206,6 @@ def _broadcast_performance_metrics():
         )
         socketio.sleep(5)
 
-
-# Start background task to push system metrics to clients
-socketio.start_background_task(_broadcast_performance_metrics)
-
-
 @app.route('/')
 def dashboard():
     """Main dashboard page"""
