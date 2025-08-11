@@ -107,10 +107,10 @@ class DatabaseConnectionPool:
         finally:
             if conn:
                 try:
-                    # Return connection to pool or close if it was temporary
-                    if self.connections.qsize() < self.max_connections:
-                        self.connections.put(conn)
-                    else:
+                    # Return connection to pool or close if pool is full
+                    try:
+                        self.connections.put(conn, block=False)
+                    except queue.Full:
                         conn.close()
                 except Exception:
                     try:
