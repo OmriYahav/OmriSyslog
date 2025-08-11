@@ -674,10 +674,21 @@
 
         // Performance monitoring via WebSocket
         function updateSystemStatsDisplay(data) {
-            document.getElementById('cpuStat').textContent = `CPU: ${data.cpu_percent.toFixed(1)}%`;
-            document.getElementById('memStat').textContent = `MEM: ${data.memory_percent.toFixed(1)}%`;
-            const recvKB = (data.net_recv_rate / 1024).toFixed(1);
-            const sendKB = (data.net_send_rate / 1024).toFixed(1);
+            const cpu = Number.isFinite(data?.cpu_percent)
+                ? `${data.cpu_percent.toFixed(1)}%`
+                : '--';
+            const mem = Number.isFinite(data?.memory_percent)
+                ? `${data.memory_percent.toFixed(1)}%`
+                : '--';
+            const recvKB = Number.isFinite(data?.net_recv_rate)
+                ? (data.net_recv_rate / 1024).toFixed(1)
+                : '--';
+            const sendKB = Number.isFinite(data?.net_send_rate)
+                ? (data.net_send_rate / 1024).toFixed(1)
+                : '--';
+
+            document.getElementById('cpuStat').textContent = `CPU: ${cpu}`;
+            document.getElementById('memStat').textContent = `MEM: ${mem}`;
             document.getElementById('netStat').textContent = `NET: ↓${recvKB} ↑${sendKB} KB/s`;
         }
 
