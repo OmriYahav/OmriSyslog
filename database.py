@@ -2,7 +2,7 @@ import sqlite3
 import threading
 import time
 from datetime import datetime, timedelta
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 import queue
 from typing import Dict, List
 import logging
@@ -41,14 +41,15 @@ class DatabaseConnectionPool:
         attempts = 5
         for attempt in range(attempts):
             try:
-                tmp_conn = sqlite3.connect(
-                    self.db_path,
-                    timeout=30.0,
-                    check_same_thread=False,
-                )
-                tmp_conn.execute("PRAGMA journal_mode=WAL")
-                tmp_conn.execute("PRAGMA synchronous=NORMAL")
-                tmp_conn.close()
+                with closing(
+                    sqlite3.connect(
+                        self.db_path,
+                        timeout=30.0,
+                        check_same_thread=False,
+                    )
+                ) as tmp_conn:
+                    tmp_conn.execute("PRAGMA journal_mode=WAL")
+                    tmp_conn.execute("PRAGMA synchronous=NORMAL")
                 break
             except sqlite3.OperationalError as e:
                 # Retry with exponential backoff if database is locked by another
@@ -60,6 +61,7 @@ class DatabaseConnectionPool:
                     f"Failed to set WAL mode (attempt {attempt + 1}/{attempts}): {e}. "
                     f"Retrying in {backoff:.1f}s"
                 )
+                logger.debug("Temporary connection closed; retrying in %.1fs", backoff)
                 time.sleep(backoff)
 
         for _ in range(self.max_connections):
