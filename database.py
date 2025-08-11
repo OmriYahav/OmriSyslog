@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # Database configuration
 DB_PATH = Path(
-    os.environ.get("SYSLOG_DB_PATH", Path.home() / "SyslogData" / "firewall_logs.db")
+    os.environ.get("SYSLOG_DB_PATH", Path("D:/SyslogData/firewall_logs.db"))
 ).expanduser().resolve()
 LOG_RETENTION_DAYS = 40
 # Ensure database directory exists
