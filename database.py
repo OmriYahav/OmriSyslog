@@ -1,4 +1,3 @@
-import contextlib
 import sqlite3
 import threading
 import time
@@ -26,61 +25,71 @@ os.makedirs(DB_PATH.parent, exist_ok=True)
 log_queue = queue.Queue()
 
 
-@contextlib.contextmanager
-def get_db_connection(db_path, timeout=30):
-    conn = sqlite3.connect(db_path, timeout=timeout)
-    try:
-        yield conn
-    finally:
-        conn.close()
-
-
-def setup_wal_mode(db_path, max_retries=10):
-    for attempt in range(max_retries):
-        try:
-            with get_db_connection(db_path) as conn:
-                conn.execute("PRAGMA journal_mode=WAL")
-                return True
-        except sqlite3.OperationalError as e:
-            if "database is locked" in str(e) and attempt < max_retries - 1:
-                time.sleep(2 ** attempt)
-                continue
-            raise
-    return False
-
-
 class DatabaseConnectionPool:
     """Thread-safe database connection pool"""
 
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls, db_path: str, max_connections: int = 10):
+        with cls._lock:
+            if (
+                cls._instance is None
+                or getattr(cls._instance, "db_path", None) != db_path
+            ):
+                cls._instance = super().__new__(cls)
+                cls._instance._initialized = False
+        return cls._instance
+
     def __init__(self, db_path: str, max_connections: int = 10):
+        if getattr(self, "_initialized", False):
+            return
         self.db_path = db_path
         self.max_connections = max_connections
         self.connections = queue.Queue(maxsize=max_connections)
         self.lock = threading.Lock()
         self._initialize_pool()
+        self._initialized = True
 
     def _initialize_pool(self):
         """Initialize the connection pool"""
-        setup_wal_mode(self.db_path)
 
-        for _ in range(self.max_connections):
+        for i in range(self.max_connections):
             conn = self._create_connection()
+            if i == 0:
+                retries = 50
+                for attempt in range(retries):
+                    try:
+                        conn.execute("PRAGMA journal_mode=WAL")
+                        conn.commit()
+                        break
+                    except sqlite3.OperationalError as e:
+                        if "database is locked" in str(e).lower() and attempt < retries - 1:
+                            time.sleep(0.1)
+                            continue
+                        raise
             self.connections.put(conn)
 
     def _create_connection(self):
         """Create a new database connection with proper settings"""
-        conn = sqlite3.connect(
-            self.db_path,
-            timeout=30.0,  # Increased timeout
-            check_same_thread=False  # Allow cross-thread usage
-        )
-
-        conn.execute('PRAGMA synchronous=NORMAL')
-        conn.execute('PRAGMA cache_size=10000')
-        conn.execute('PRAGMA temp_store=MEMORY')
-        conn.execute('PRAGMA busy_timeout=30000')  # 30 second busy timeout
-
-        return conn
+        retries = 50
+        for attempt in range(retries):
+            try:
+                conn = sqlite3.connect(
+                    self.db_path,
+                    timeout=30.0,  # Increased timeout
+                    check_same_thread=False,  # Allow cross-thread usage
+                )
+                conn.execute('PRAGMA synchronous=NORMAL')
+                conn.execute('PRAGMA cache_size=10000')
+                conn.execute('PRAGMA temp_store=MEMORY')
+                conn.execute('PRAGMA busy_timeout=30000')  # 30 second busy timeout
+                return conn
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e).lower() and attempt < retries - 1:
+                    time.sleep(0.1)
+                    continue
+                raise
 
     @contextmanager
     def get_connection(self):
@@ -141,7 +150,10 @@ class DatabaseManager:
 
         self.db_path = db_path
         global db_pool
-        db_pool = DatabaseConnectionPool(db_path, max_connections=30)
+        if db_pool is None or db_pool.db_path != db_path:
+            db_pool = DatabaseConnectionPool(db_path, max_connections=30)
+        else:
+            logger.debug("Reusing existing database connection pool")
         self.init_database()
         if start_threads:
             self.start_batch_processor()
