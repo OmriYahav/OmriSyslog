@@ -12,19 +12,13 @@ from database import DB_PATH, LOG_RETENTION_DAYS
 # Flag to ensure the metrics broadcaster starts only once
 _metrics_task_started = False
 
-
-_metrics_task_started = False
-
-
 def create_app():
     """Initialize the Flask application and background tasks."""
 
-    @app.before_first_request
-    def _start_background_tasks() -> None:
-        global _metrics_task_started
-        if not _metrics_task_started:
-            socketio.start_background_task(_broadcast_performance_metrics)
-            _metrics_task_started = True
+    global _metrics_task_started
+    if not _metrics_task_started:
+        socketio.start_background_task(_broadcast_performance_metrics)
+        _metrics_task_started = True
 
     return app
 
