@@ -15,12 +15,10 @@ _metrics_task_started = False
 def create_app():
     """Initialize the Flask application and background tasks."""
 
-    @app.before_first_request
-    def _start_background_tasks() -> None:
-        global _metrics_task_started
-        if not _metrics_task_started:
-            socketio.start_background_task(_broadcast_performance_metrics)
-            _metrics_task_started = True
+    global _metrics_task_started
+    if not _metrics_task_started:
+        socketio.start_background_task(_broadcast_performance_metrics)
+        _metrics_task_started = True
 
     return app
 
