@@ -406,6 +406,12 @@
         // Initialize Socket.IO
         function initSocket() {
             socket = io('/logs');
+            socket.on('connect', function() {
+                console.info('Connected to log server');
+            });
+            socket.on('connect_error', function(err) {
+                console.warn('Socket connection error:', err);
+            });
             socket.on('new_log', function(log) {
                 if (liveUpdates) {
                     addLogToTop(log);
