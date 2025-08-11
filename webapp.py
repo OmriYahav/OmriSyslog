@@ -19,7 +19,8 @@ except Exception:  # pragma: no cover - optional dependency
     psutil = None
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-change-this'
+# Read SECRET_KEY from environment with a development fallback
+app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev-secret-key")
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 set_socketio(socketio)
 
