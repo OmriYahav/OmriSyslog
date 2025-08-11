@@ -12,10 +12,6 @@ from database import DB_PATH, LOG_RETENTION_DAYS
 # Flag to ensure the metrics broadcaster starts only once
 _metrics_task_started = False
 
-
-_metrics_task_started = False
-
-
 def create_app():
     """Initialize the Flask application and background tasks."""
 
