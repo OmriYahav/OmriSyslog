@@ -41,3 +41,23 @@ def test_store_and_search(tmp_path, monkeypatch):
     assert stats['severity_stats'][3] == 1
     assert stats['db_size_bytes'] > 0
 
+
+def test_pool_initializes_wal_mode(tmp_path):
+    from database import DatabaseConnectionPool
+    db_file = tmp_path / 'logs.db'
+
+    # Should not raise OperationalError during initialization
+    pool = DatabaseConnectionPool(str(db_file), max_connections=2)
+
+    with pool.get_connection() as conn:
+        mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        assert mode.lower() == "wal"
+
+    # New connections should inherit WAL mode without explicitly setting it
+    import sqlite3
+
+    conn2 = sqlite3.connect(str(db_file))
+    mode2 = conn2.execute("PRAGMA journal_mode").fetchone()[0]
+    conn2.close()
+    assert mode2.lower() == "wal"
+

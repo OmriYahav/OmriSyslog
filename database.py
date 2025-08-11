@@ -37,6 +37,31 @@ class DatabaseConnectionPool:
 
     def _initialize_pool(self):
         """Initialize the connection pool"""
+        # Ensure database is in WAL mode before creating pool connections
+        attempts = 5
+        for attempt in range(attempts):
+            try:
+                tmp_conn = sqlite3.connect(
+                    self.db_path,
+                    timeout=30.0,
+                    check_same_thread=False,
+                )
+                tmp_conn.execute("PRAGMA journal_mode=WAL")
+                tmp_conn.execute("PRAGMA synchronous=NORMAL")
+                tmp_conn.close()
+                break
+            except sqlite3.OperationalError as e:
+                # Retry with exponential backoff if database is locked by another
+                # process during WAL mode switch
+                if attempt == attempts - 1:
+                    raise
+                backoff = 0.1 * (2 ** attempt)
+                logger.warning(
+                    f"Failed to set WAL mode (attempt {attempt + 1}/{attempts}): {e}. "
+                    f"Retrying in {backoff:.1f}s"
+                )
+                time.sleep(backoff)
+
         for _ in range(self.max_connections):
             conn = self._create_connection()
             self.connections.put(conn)
@@ -49,8 +74,6 @@ class DatabaseConnectionPool:
             check_same_thread=False  # Allow cross-thread usage
         )
 
-        # Enable WAL mode for better concurrency
-        conn.execute('PRAGMA journal_mode=WAL')
         conn.execute('PRAGMA synchronous=NORMAL')
         conn.execute('PRAGMA cache_size=10000')
         conn.execute('PRAGMA temp_store=MEMORY')
